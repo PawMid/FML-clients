@@ -2,16 +2,20 @@ import csv
 import os
 import random
 import shutil
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageChops
 from termcolor import colored
 from progressBar import progressBar
 import matplotlib.pyplot as plt
 import numpy as np
 import collections
+import imgSrc
+import cv2
+import tensorflow.keras.datasets.cifar10 as cf
 
 
 class DataLoader:
-    def __init__(self, mainPath, classDirs, splitPath, split=0, seed=0, devices=0, proxySplit=0):
+    def __init__(self, mainPath=imgSrc.covid_dataset, classDirs=(imgSrc.covid, imgSrc.normal), splitPath=imgSrc.learnDir,
+                 split=0, seed=0, devices=0, proxySplit=0):
         self.__mainPath = mainPath
         self.__images = []
         self.__imageClass = []
@@ -110,7 +114,7 @@ class DataLoader:
         for element in collection:
             tmpPath = os.path.join(path, self.__classes[element['class']])
             shutil.copy(element['src'], tmpPath)
-        progressBar(self.__totalData, self.__dataCount, newline)
+        progressBar(self.__totalData, self.__totalData-self.__dataCount, newline)
 
     def splitData(self):
         self.__clearSplitDir__()
@@ -169,11 +173,41 @@ class DataLoader:
 
         return classes
 
+    def downloadCifar(self):
+
+        from imgSrc import cifar_classes, cifar_dataset
+
+        if os.path.exists(cifar_dataset):
+            shutil.rmtree(cifar_dataset)
+
+        os.mkdir(cifar_dataset)
+
+        for o in cifar_classes:
+            os.mkdir(cifar_dataset + o)
+
+        (x_train, y_train), (x_test, y_test) = cf.load_data()
+        trainLen = range(len(x_train))
+        testLen = range(len(x_test))
+
+        def saveImg(images, classes, leng):
+            for i in leng:
+                iClass = cifar_classes[classes[i][0]]
+                path = cifar_dataset + iClass
+                dir = os.listdir(path)
+                filename = iClass + '_' + str(len(dir))
+                img = Image.fromarray(images[i])
+                img.save(path + filename + '.jpeg', format='JPEG')
+
+        saveImg(x_train, y_train, trainLen)
+        saveImg(x_test, y_test, testLen)
+
+
+
     def countClasses(self):
         classes = {-2: self.__countClasses__('test')}
         devices = {-2: 'test'}
         for device in os.listdir(os.path.join(self.__splitPath, 'train')):
-            val = self.__countClasses__('train\\'+device)
+            val = self.__countClasses__('train\\' + device)
             if device.find('_') is not -1:
                 spl = device.split(sep='_')
                 classes[int(spl[1])] = val
@@ -221,17 +255,17 @@ class DataLoader:
         ind = np.arange(len(devs))
         width = 0.3
         fig, ax = plt.subplots()
-        colors = ['red', 'green', 'blue']
+        colors = ['firebrick', 'darkorange', 'forestgreen', 'orange']
         for i in range(len(classes)):
-            ax.barh(ind + width * i, list(iter(cls.values()))[i], width, color=colors[i],\
+            ax.barh(ind + width * i, list(iter(cls.values()))[i], width, color=colors[i], \
                     label=list(iter(cls.keys()))[i])
         ax.set(yticks=ind + width, yticklabels=devs, ylim=[2 * width - 1, len(devs)])
         ax.legend(loc=4)
-        plt.title('Liczność klas w losowych urządzeniach')
+        plt.title('Classes in devices for seed ' + str(self.__seed))
         if path is '' or path is None:
             plt.show()
         else:
-            plt.savefig(path)
+            plt.savefig(os.path.join(path, 'class_distribution_seed_'+str(self.__seed)+'.png'))
             plt.close()
 
     def loadData(self, device, grayscale=False):
